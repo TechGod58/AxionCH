@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# JetBrains / Android Studio
+.idea/
+.gradle/
+local.properties
+captures/
+build/
+**/build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+.server.out.log
+.server.err.log
+
+# Local data/artifacts
+*.db
+media_outputs/
+dist/

@@ -1,0 +1,90 @@
+# AxionCH Assessment Checklist (2026-04-19)
+
+## Completed in this run (Batches 1-40 + Windows CI/Store Pipeline)
+- Batch 1: Backend dry-run history hardening
+- Batch 2: Shared client and Android repository API alignment
+- Batch 3: Android + Desktop dry-run history platform filtering UX
+- Batch 4: Regression tests and checklist documentation
+- Batch 5: API authentication + request authorization (optional API key gate)
+- Batch 6: Persistent dry-run history (DB-backed tables + trimming)
+- Batch 7: Secret management hardening (`/config/security` checks + startup warnings)
+- Batch 8: Queue/retry/backoff for live publish jobs (`/posts/queue` + worker + job status)
+- Batch 9: OAuth onboarding scaffolds (X, LinkedIn, Instagram start/callback routes)
+- Batch 10: CI workflows and validation gates (`.github/workflows/ci.yml`)
+- Batch 11: OAuth callback token exchange persistence for access/refresh/type/scope/expiry fields
+- Batch 12: Per-user API key identities (`/auth/keys`) as an auth path alongside optional global `API_KEY`
+- Batch 13: Publish dead-letter queue handling + metrics endpoint (`/posts/metrics`, `/posts/dead-letters`)
+- Batch 14: Integration tests for OAuth callback persistence + per-user auth lifecycle + queue dead-letter/requeue flows
+- Batch 15: OAuth token refresh worker with due-token scanning and refresh backoff
+- Batch 16: User-scoped authorization for accounts/posts/auth-key operations (prevents cross-user access in scoped sessions)
+- Batch 17: Dead-letter payload drilldown UX in Android and Desktop apps
+- Batch 18: Background scheduler replay tests for persisted queued jobs across service restarts
+- Batch 19: Provider-specific OAuth refresh hardening (retryability classification, Instagram refresh URL/fallbacks, non-retryable expiry handling)
+- Batch 20: Dead-letter payload prettify + copy helpers in Android and Desktop drilldown UIs
+- Batch 21: Security baseline pass (CORS restriction support, DEBUG-off defaults, strict API auth policy, Android backup lock-down)
+- Batch 22: Secrets-at-rest hardening (social OAuth token encryption at rest, Argon2id API-key hashing, Android Keystore + Windows DPAPI local key storage)
+- Batch 23: Media safety hardening (SSRF host checks, private-network deny, MIME checks, URL/file size limits, ffmpeg timeout)
+- Batch 24: Release/repo hygiene pass (AxionCHPC desktop source-of-truth, CI alignment, Microsoft Store submission pack + privacy policy template)
+- Batch 25: Secret/token operational rotation tooling (plaintext token migration + token/vault key rotation script)
+- Batch 26: Production CORS hardening (`RUNTIME_ENVIRONMENT=production` + no wildcard/local origin enforcement)
+- Batch 27: Security smoke tests for auth/CORS/media added as CI gate
+- Batch 28: Key rotation playbook + incident recovery runbook documentation
+- Batch 29: Local repo bootstrap (`git init`, `main` branch) and push automation script
+- Batch 30: Root/API gitignore hardening for env files, local DB, logs, and media artifacts
+- Batch 31: Vault key compatibility improvement (allow legacy weak historical keys for decrypt attempts only)
+- Batch 32: Vault hygiene service for decryptability audit + undecryptable issue reporting
+- Batch 33: Vault quarantine table (`vault_entry_quarantine`) for safe retention of unreadable rows
+- Batch 34: Vault cleanup utility with dry-run/apply and automatic sqlite backup
+- Batch 35: Vault hygiene regression test (`test_vault_hygiene.py`)
+- Batch 36: Pre-push local security validation script
+- Batch 37: Repo bootstrap/push runbook documentation
+- Batch 38: Vault cleanup/rotation runbook documentation
+- Batch 39: Executed vault quarantine apply cleanup on local DB and revalidated decryptability
+- Batch 40: Post-cleanup rotation validation pass and full test-suite verification
+- Windows CI pipeline: release EXE/MSI build + optional signing + artifact publishing
+
+## Checklist
+- `DONE` Config diagnostics endpoint exists: `/config/status`
+- `DONE` Credential validation endpoint exists: `/config/check`
+- `DONE` Dry-run publish endpoint exists: `/posts/dry-run`
+- `DONE` Dry-run history endpoint exists: `/posts/dry-run-history` with limit/filter
+- `DONE` Platform-scoped dry-run history clear exists
+- `DONE` Shared DTO/network layer reused by Android + Desktop
+- `DONE` Android has separate Live Results and Dry Run History screens
+- `DONE` Desktop has separate live vs dry-run views and history panel
+- `DONE` Backend regression tests added for config and dry-run history contracts
+- `DONE` AuthN/AuthZ gate for API endpoints (via `API_KEY`)
+- `DONE` Persistent dry-run history storage (DB-backed)
+- `DONE` Secret management hardening checks endpoint and warnings
+- `DONE` Publish queue/retry/backoff baseline
+- `DONE` OAuth onboarding route scaffolds for each social platform
+- `DONE` CI pipeline for tests/build/compile
+- `DONE` OAuth callback persists token exchange data on social accounts
+- `DONE` Per-user API keys can be created/listed/revoked and used for endpoint auth
+- `DONE` Dead-letter list + requeue endpoints exist for failed queue jobs
+- `DONE` Queue observability metrics endpoint exists and reports worker counters
+- `DONE` Batch 11-14 backend integration tests added and passing in local test run
+- `DONE` OAuth refresh worker started on app startup and stopped on shutdown
+- `DONE` User-scoped sessions can only read/write their own accounts/posts/auth keys
+- `DONE` Android Results screen includes dead-letter payload drilldown panel
+- `DONE` Desktop app includes dead-letter payload drilldown panel
+- `DONE` Android + Desktop dead-letter panels include requeue action
+- `DONE` Batch 15-18 tests added and passing in local backend test run
+- `DONE` Batch 19 refresh hardening tests added and passing in local backend test run
+- `DONE` Android + Desktop dead-letter drilldown payload prettify/copy helpers
+- `DONE` Release packaging ProGuard warning policy hardened for desktop release installers
+- `DONE` CI builds Windows release installers and uploads EXE/MSI artifacts
+- `DONE` CI supports optional Windows code signing via repository secrets
+- `DONE` Secret rotation script exists for social token migration and token/vault key re-encryption
+- `DONE` Production CORS runtime validation blocks wildcard/private/local origins
+- `DONE` CI runs security smoke tests before full backend suite
+- `DONE` Key-rotation playbook and incident-recovery runbook are documented
+- `DONE` Repo bootstrap script exists to init/connect/push once remote URL is provided
+- `DONE` Vault cleanup utility can quarantine undecryptable rows with dry-run/apply modes
+- `DONE` Undecryptable legacy rows are retained in quarantine table instead of blind deletion
+- `DONE` Local sqlite backup is created automatically before vault cleanup apply
+- `DONE` Full backend suite remains green after vault hygiene changes
+
+## Next Quality Batches (optional)
+- Batch 41: Add admin API endpoints for vault hygiene audit/quarantine status
+- Batch 42: Add restoration utility to replay quarantined rows after manual key recovery

@@ -1,0 +1,46 @@
+name: axionch-ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: axionch-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Run security smoke tests (auth/cors/media)
+        run: python -m pytest -q tests/test_security_smoke_ci.py
+      - name: Run backend tests
+        run: python -m pytest tests
+
+  android-compile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: axionch-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Compile Android Kotlin
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:compileDebugKotlin
+
+  # Desktop source-of-truth moved to C:\AxionCHPC.
+  # Desktop packaging/signing CI now runs from:
+  #   C:\AxionCHPC\.github\workflows\windows-installers.yml
