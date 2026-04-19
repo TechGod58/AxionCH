@@ -2,6 +2,14 @@
 
 This package is a stronger starter for the **AxionCH** creator app:
 
+## Legal Notice
+This repository is proprietary software and is **not** licensed for public or third-party use.
+See:
+
+- `C:\AxionCH\LICENSE`
+- `C:\AxionCH\NOTICE`
+- `C:\AxionCH\docs\legal_terms.md`
+
 - **axionch-api**: FastAPI backend scaffold with:
   - settings
   - DB session
