@@ -8,6 +8,13 @@ on:
 jobs:
   api-tests:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "sqlite:///./axionch_ci.db"
+      TOKEN_ENCRYPTION_KEY: "ci-token-encryption-key-0123456789abcdef0123456789abcdef"
+      VAULT_ENCRYPTION_KEY: "ci-vault-encryption-key-0123456789abcdef0123456789abcdef"
+      API_KEY_HASH_SALT: "ci-api-key-hash-salt-0123456789abcdef"
+      RUNTIME_ENVIRONMENT: "development"
+      DEBUG: "false"
     defaults:
       run:
         working-directory: axionch-api
