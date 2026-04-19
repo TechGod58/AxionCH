@@ -276,3 +276,298 @@ def test_media_source_url_blocks_localhost_ssrf_target() -> None:
     finally:
         settings.api_key = original_api_key
         settings.media_allow_http_source_urls = original_allow_http
+
+
+def test_motion_track_extended_contract_fields() -> None:
+    original_api_key = settings.api_key
+    settings.api_key = "motion-track-contract-key"
+
+    try:
+        with TestClient(app) as client:
+            headers = _master_headers("motion-track-contract-key")
+            response = client.post(
+                "/media/video/motion-track",
+                headers=headers,
+                json={
+                    "source_path": "C:/does/not/exist.mp4",
+                    "sample_every_n_frames": 2,
+                    "roi_x": 10,
+                    "roi_y": 10,
+                    "roi_width": 200,
+                    "roi_height": 180,
+                    "smoothing_window": 5,
+                    "min_confidence": 0.08,
+                    "output_overlay_name": "track_overlay_contract.mp4",
+                },
+            )
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["success"] is False
+            assert "average_confidence" in payload
+            assert "overlay_path" in payload
+            assert isinstance(payload["track_points"], list)
+    finally:
+        settings.api_key = original_api_key
+
+
+def test_image_heal_extended_contract_fields() -> None:
+    original_api_key = settings.api_key
+    settings.api_key = "image-heal-contract-key"
+
+    try:
+        with TestClient(app) as client:
+            headers = _master_headers("image-heal-contract-key")
+            response = client.post(
+                "/media/image/heal",
+                headers=headers,
+                json={
+                    "source_path": "C:/does/not/exist.png",
+                    "method": "telea",
+                    "fill_strategy": "hybrid",
+                    "edge_blend": 0.6,
+                    "denoise_strength": 2.0,
+                },
+            )
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["success"] is False
+            assert "message" in payload
+    finally:
+        settings.api_key = original_api_key
+
+
+def test_creator_templates_include_reels_shorts_tiktok() -> None:
+    original_api_key = settings.api_key
+    settings.api_key = "creator-templates-key"
+
+    try:
+        with TestClient(app) as client:
+            headers = _master_headers("creator-templates-key")
+            response = client.get("/media/templates", headers=headers)
+            assert response.status_code == 200
+            payload = response.json()
+            templates = payload.get("templates") or []
+            ids = {item.get("id") for item in templates}
+            assert "reels-1080x1920" in ids
+            assert "shorts-1080x1920" in ids
+            assert "tiktok-1080x1920" in ids
+
+            reels = client.get("/media/templates?platform=instagram&media_type=video", headers=headers)
+            assert reels.status_code == 200
+            reels_payload = reels.json()
+            reels_ids = {item.get("id") for item in reels_payload.get("templates") or []}
+            assert "reels-1080x1920" in reels_ids
+    finally:
+        settings.api_key = original_api_key
+
+
+def test_export_pipeline_presets_queue_and_job_status_contract() -> None:
+    original_api_key = settings.api_key
+    settings.api_key = "export-pipeline-key"
+
+    try:
+        with TestClient(app) as client:
+            headers = _master_headers("export-pipeline-key")
+
+            presets_response = client.get("/media/exports/presets", headers=headers)
+            assert presets_response.status_code == 200
+            presets_payload = presets_response.json()
+            assert isinstance(presets_payload.get("presets"), list)
+            assert len(presets_payload["presets"]) >= 1
+            preset_ids = {item["id"] for item in presets_payload["presets"]}
+            assert "reels-h264-1080x1920" in preset_ids
+
+            queue_response = client.post(
+                "/media/exports/queue",
+                headers=headers,
+                json={
+                    "source_paths": ["C:/does/not/exist.mp4"],
+                    "source_urls": [],
+                    "preset_id": "reels-h264-1080x1920",
+                    "output_prefix": "contract_export",
+                    "hardware_acceleration": True,
+                },
+            )
+            assert queue_response.status_code == 200
+            queue_payload = queue_response.json()
+            assert queue_payload["queued_items"] == 1
+            assert queue_payload["job_id"]
+
+            status_response = client.get(f"/media/exports/jobs/{queue_payload['job_id']}", headers=headers)
+            assert status_response.status_code == 200
+            status_payload = status_response.json()
+            assert status_payload["job_id"] == queue_payload["job_id"]
+            assert status_payload["preset_id"] == "reels-h264-1080x1920"
+            assert status_payload["queued_items"] == 1
+            assert isinstance(status_payload.get("items"), list)
+            assert len(status_payload["items"]) == 1
+    finally:
+        settings.api_key = original_api_key
+
+
+def test_asset_workflow_stock_audio_overlay_with_license_metadata() -> None:
+    original_api_key = settings.api_key
+    original_media_output_dir = settings.media_output_dir
+    settings.api_key = "asset-workflow-key"
+    temp_dir = tempfile.TemporaryDirectory()
+    settings.media_output_dir = temp_dir.name
+
+    try:
+        with TestClient(app) as client:
+            headers = _master_headers("asset-workflow-key")
+
+            audio_response = client.post(
+                "/media/assets",
+                headers=headers,
+                json={
+                    "kind": "audio",
+                    "title": "LoFi Chill Bed",
+                    "source": "creator-marketplace",
+                    "license_name": "Royalty-Free Creator License",
+                    "license_url": "https://example.com/licenses/creator-audio",
+                    "attribution_required": True,
+                    "attribution_text": "Music by Creator Marketplace",
+                    "tags": ["lofi", "chill", "bed"],
+                    "local_path": "C:/media/stock/lofi_chill.wav",
+                },
+            )
+            assert audio_response.status_code == 200
+            audio_asset = audio_response.json()["asset"]
+            assert audio_asset["kind"] == "audio"
+            assert audio_asset["license_name"] == "Royalty-Free Creator License"
+            assert audio_asset["attribution_required"] is True
+            assert "lofi" in audio_asset["tags"]
+
+            overlay_response = client.post(
+                "/media/assets",
+                headers=headers,
+                json={
+                    "kind": "overlay",
+                    "title": "Neon Frame Overlay",
+                    "source": "brand-pack",
+                    "license_name": "Internal Brand License",
+                    "attribution_required": False,
+                    "tags": ["branding", "frame"],
+                    "remote_url": "https://cdn.example.com/overlays/neon_frame.png",
+                },
+            )
+            assert overlay_response.status_code == 200
+            overlay_asset = overlay_response.json()["asset"]
+            assert overlay_asset["kind"] == "overlay"
+            assert overlay_asset["remote_url"] == "https://cdn.example.com/overlays/neon_frame.png"
+
+            audio_list = client.get("/media/assets?kind=audio", headers=headers)
+            assert audio_list.status_code == 200
+            audio_payload = audio_list.json()
+            assert audio_payload["kind"] == "audio"
+            assert audio_payload["total_returned"] >= 1
+            assert any(item["id"] == audio_asset["id"] for item in audio_payload["items"])
+
+            overlay_list = client.get("/media/assets?kind=overlay&tag=branding", headers=headers)
+            assert overlay_list.status_code == 200
+            overlay_payload = overlay_list.json()
+            assert overlay_payload["kind"] == "overlay"
+            assert overlay_payload["tag"] == "branding"
+            assert any(item["id"] == overlay_asset["id"] for item in overlay_payload["items"])
+
+            delete_response = client.delete(f"/media/assets/{overlay_asset['id']}", headers=headers)
+            assert delete_response.status_code == 200
+            delete_payload = delete_response.json()
+            assert delete_payload["deleted"] is True
+
+            overlay_after_delete = client.get("/media/assets?kind=overlay", headers=headers)
+            assert overlay_after_delete.status_code == 200
+            remaining_overlay_ids = {item["id"] for item in overlay_after_delete.json()["items"]}
+            assert overlay_asset["id"] not in remaining_overlay_ids
+    finally:
+        temp_dir.cleanup()
+        settings.api_key = original_api_key
+        settings.media_output_dir = original_media_output_dir
+
+
+def test_live_multicast_dry_run_start_list_stop_contract() -> None:
+    original_api_key = settings.api_key
+    settings.api_key = "live-multicast-dry-run-key"
+
+    try:
+        with TestClient(app) as client:
+            headers = _master_headers("live-multicast-dry-run-key")
+
+            start_response = client.post(
+                "/media/live/multicast/start",
+                headers=headers,
+                json={
+                    "session_name": "contract-dry-run",
+                    "source_url": "https://example.com/live-source.mp4",
+                    "dry_run": True,
+                    "destinations": [
+                        {
+                            "platform": "x",
+                            "label": "X",
+                            "ingest_url": "rtmps://example.com:443/stream",
+                            "stream_key": "secret-key",
+                            "enabled": True,
+                        },
+                        {
+                            "platform": "linkedin",
+                            "label": "LinkedIn",
+                            "ingest_url": "rtmp://example.org/app",
+                            "stream_key": "linkedin-key",
+                            "enabled": True,
+                        },
+                    ],
+                },
+            )
+            assert start_response.status_code == 200
+            started = start_response.json()
+            assert started["dry_run"] is True
+            assert started["status"] == "live_simulated"
+            assert started["active_destinations"] == 2
+            assert started["failed_destinations"] == 0
+            assert started["session_id"]
+            session_id = started["session_id"]
+
+            list_response = client.get("/media/live/multicast/sessions", headers=headers)
+            assert list_response.status_code == 200
+            listing = list_response.json()
+            assert listing["total_returned"] >= 1
+            assert any(item["session_id"] == session_id for item in listing["sessions"])
+
+            get_response = client.get(f"/media/live/multicast/sessions/{session_id}", headers=headers)
+            assert get_response.status_code == 200
+            fetched = get_response.json()
+            assert fetched["session_id"] == session_id
+            assert isinstance(fetched["destinations"], list)
+            assert len(fetched["destinations"]) == 2
+            assert fetched["destinations"][0]["ingest_url_masked"].endswith("/***")
+
+            stop_response = client.post(f"/media/live/multicast/sessions/{session_id}/stop", headers=headers)
+            assert stop_response.status_code == 200
+            stopped = stop_response.json()
+            assert stopped["session_id"] == session_id
+            assert stopped["stopped"] is True
+            assert stopped["status"] in {"stopped", "failed"}
+    finally:
+        settings.api_key = original_api_key
+
+
+def test_live_multicast_validation_requires_destination() -> None:
+    original_api_key = settings.api_key
+    settings.api_key = "live-multicast-validation-key"
+
+    try:
+        with TestClient(app) as client:
+            headers = _master_headers("live-multicast-validation-key")
+            response = client.post(
+                "/media/live/multicast/start",
+                headers=headers,
+                json={
+                    "source_url": "https://example.com/live-source.mp4",
+                    "dry_run": True,
+                    "destinations": [],
+                },
+            )
+            assert response.status_code == 400
+            assert "at least one enabled destination" in response.json()["detail"].lower()
+    finally:
+        settings.api_key = original_api_key

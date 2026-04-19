@@ -112,6 +112,9 @@ fun DashboardScreen(
             Button(onClick = { navController.navigate(NavRoute.Vault.route) }) {
                 Text("Password Vault")
             }
+            Button(onClick = { navController.navigate(NavRoute.MediaStudio.route) }) {
+                Text("Media Studio")
+            }
         }
     }
 }

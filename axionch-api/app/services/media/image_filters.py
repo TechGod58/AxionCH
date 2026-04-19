@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps, ImageDraw, ImageFont
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps, ImageDraw, ImageFont, ImageChops
 
 from app.core.config import settings
 from app.services.media.safety import (
@@ -135,6 +135,14 @@ def _caricature_style(image: Image.Image) -> Image.Image:
     return work
 
 
+def _apply_raw_enhance(image: Image.Image) -> Image.Image:
+    # RAW-like finishing pass for highlight/shadow balance and detail pop.
+    work = ImageEnhance.Contrast(image).enhance(1.08)
+    work = ImageEnhance.Sharpness(work).enhance(1.2)
+    work = ImageEnhance.Color(work).enhance(1.05)
+    return work
+
+
 def _apply_overlay(
     base: Image.Image,
     *,
@@ -167,6 +175,70 @@ def _apply_overlay(
                 pass
 
 
+def _blend_with_mode(base_rgba: Image.Image, layer_rgba: Image.Image, blend_mode: str) -> Image.Image:
+    mode = (blend_mode or "normal").strip().lower()
+    if mode == "multiply":
+        blended = ImageChops.multiply(base_rgba.convert("RGB"), layer_rgba.convert("RGB")).convert("RGBA")
+        blended.putalpha(base_rgba.split()[3])
+        return blended
+    if mode == "screen":
+        inv = ImageChops.multiply(
+            ImageChops.invert(base_rgba.convert("RGB")),
+            ImageChops.invert(layer_rgba.convert("RGB")),
+        )
+        blended = ImageChops.invert(inv).convert("RGBA")
+        blended.putalpha(base_rgba.split()[3])
+        return blended
+    return Image.alpha_composite(base_rgba, layer_rgba)
+
+
+def _apply_layers(base: Image.Image, *, layers: list[dict[str, object]]) -> Image.Image:
+    if not layers:
+        return base
+    output = base.convert("RGBA")
+    for layer in layers:
+        layer_source, layer_downloaded = _load_optional_image(
+            str(layer.get("layer_path") or "").strip() or None,
+            str(layer.get("layer_url") or "").strip() or None,
+        )
+        if layer_source is None:
+            continue
+        mask_source, mask_downloaded = _load_optional_image(
+            str(layer.get("mask_path") or "").strip() or None,
+            str(layer.get("mask_url") or "").strip() or None,
+        )
+        try:
+            with Image.open(layer_source) as layer_img:
+                layer_rgba = layer_img.convert("RGBA")
+                opacity = max(0.0, min(1.0, float(layer.get("opacity") or 1.0)))
+                alpha = layer_rgba.split()[3].point(lambda a: int(a * opacity))
+                layer_rgba.putalpha(alpha)
+
+                if mask_source is not None:
+                    with Image.open(mask_source) as mask_img:
+                        mask = mask_img.convert("L").resize(layer_rgba.size)
+                        mask = mask.point(lambda a: int(a * opacity))
+                        layer_rgba.putalpha(mask)
+
+                x = max(0, int(layer.get("x") or 0))
+                y = max(0, int(layer.get("y") or 0))
+                canvas = Image.new("RGBA", output.size, (0, 0, 0, 0))
+                canvas.alpha_composite(layer_rgba, dest=(x, y))
+                output = _blend_with_mode(output, canvas, str(layer.get("blend_mode") or "normal"))
+        finally:
+            if layer_downloaded:
+                try:
+                    layer_source.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            if mask_downloaded and mask_source is not None:
+                try:
+                    mask_source.unlink(missing_ok=True)
+                except Exception:
+                    pass
+    return output.convert("RGB")
+
+
 def _draw_text(
     image: Image.Image,
     *,
@@ -189,6 +261,88 @@ def _draw_text(
         font = ImageFont.load_default()
     draw.text((max(0, text_x), max(0, text_y)), text_overlay, fill=text_color or "#FFFFFF", font=font)
     return image
+
+
+def _apply_selective_adjustment(
+    image: Image.Image,
+    *,
+    x: int | None,
+    y: int | None,
+    width: int | None,
+    height: int | None,
+    brightness: float,
+    contrast: float,
+    saturation: float,
+) -> Image.Image:
+    if x is None or y is None or width is None or height is None:
+        return image
+    if width <= 0 or height <= 0:
+        return image
+    left = max(0, x)
+    top = max(0, y)
+    right = min(image.width, left + width)
+    bottom = min(image.height, top + height)
+    if right <= left or bottom <= top:
+        return image
+    crop = image.crop((left, top, right, bottom))
+    crop = ImageEnhance.Brightness(crop).enhance(max(0.0, brightness))
+    crop = ImageEnhance.Contrast(crop).enhance(max(0.0, contrast))
+    crop = ImageEnhance.Color(crop).enhance(max(0.0, saturation))
+    output = image.copy()
+    output.paste(crop, (left, top))
+    return output
+
+
+def _apply_erase_regions(image: Image.Image, *, regions: list[dict[str, int]]) -> Image.Image:
+    if not regions:
+        return image
+    output = image.copy()
+    blurred = output.filter(ImageFilter.GaussianBlur(radius=10))
+    for region in regions:
+        x = max(0, int(region.get("x", 0)))
+        y = max(0, int(region.get("y", 0)))
+        width = max(0, int(region.get("width", 0)))
+        height = max(0, int(region.get("height", 0)))
+        if width <= 0 or height <= 0:
+            continue
+        box = (x, y, min(output.width, x + width), min(output.height, y + height))
+        if box[2] <= box[0] or box[3] <= box[1]:
+            continue
+        patch = blurred.crop(box)
+        output.paste(patch, box[:2])
+    return output
+
+
+def _parse_hex_color(hex_color: str) -> tuple[int, int, int] | None:
+    value = (hex_color or "").strip().lstrip("#")
+    if len(value) == 3:
+        value = "".join(ch * 2 for ch in value)
+    if len(value) != 6:
+        return None
+    try:
+        return int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
+    except ValueError:
+        return None
+
+
+def _apply_background_key(image: Image.Image, *, key_color: str | None, tolerance: int) -> tuple[Image.Image, bool]:
+    if not key_color:
+        return image, False
+    color = _parse_hex_color(key_color)
+    if color is None:
+        return image, False
+    tol = max(0, min(255, int(tolerance)))
+    rgba = image.convert("RGBA")
+    pixels = rgba.load()
+    width, height = rgba.size
+    removed = False
+    for y in range(height):
+        for x in range(width):
+            r, g, b, a = pixels[x, y]
+            if abs(r - color[0]) <= tol and abs(g - color[1]) <= tol and abs(b - color[2]) <= tol:
+                pixels[x, y] = (r, g, b, 0)
+                removed = True
+    return rgba, removed
 
 
 def _apply_preset(image: Image.Image, preset_id: str) -> Image.Image:
@@ -245,6 +399,18 @@ def apply_image_filter(
     text_y: int = 16,
     text_size: int = 28,
     text_color: str = "#FFFFFF",
+    raw_enhance: bool = False,
+    selective_x: int | None = None,
+    selective_y: int | None = None,
+    selective_width: int | None = None,
+    selective_height: int | None = None,
+    selective_brightness_factor: float = 1.0,
+    selective_contrast_factor: float = 1.0,
+    selective_saturation_factor: float = 1.0,
+    erase_regions: list[dict[str, int]] | None = None,
+    layers: list[dict[str, object]] | None = None,
+    background_key_color: str | None = None,
+    background_key_tolerance: int = 24,
 ) -> ApplyImageFilterResult:
     preset = IMAGE_PRESETS.get(preset_id)
     if preset is None:
@@ -286,6 +452,8 @@ def apply_image_filter(
             filtered = ImageEnhance.Color(filtered).enhance(max(0.0, saturation_factor))
             filtered = ImageEnhance.Brightness(filtered).enhance(max(0.0, brightness_factor))
             filtered = ImageEnhance.Contrast(filtered).enhance(max(0.0, contrast_factor))
+            if raw_enhance:
+                filtered = _apply_raw_enhance(filtered)
             if sepia:
                 filtered = _apply_sepia_matrix(filtered)
             if black_white:
@@ -294,6 +462,18 @@ def apply_image_filter(
                 filtered = _cartoonify(filtered)
             if caricature:
                 filtered = _caricature_style(filtered)
+            filtered = _apply_selective_adjustment(
+                filtered,
+                x=selective_x,
+                y=selective_y,
+                width=selective_width,
+                height=selective_height,
+                brightness=selective_brightness_factor,
+                contrast=selective_contrast_factor,
+                saturation=selective_saturation_factor,
+            )
+            filtered = _apply_erase_regions(filtered, regions=erase_regions or [])
+            filtered = _apply_layers(filtered, layers=layers or [])
             filtered = _apply_overlay(
                 filtered,
                 overlay_path=overlay_path,
@@ -310,12 +490,23 @@ def apply_image_filter(
                 text_size=text_size,
                 text_color=text_color,
             )
+            filtered_with_alpha, removed_bg = _apply_background_key(
+                filtered,
+                key_color=background_key_color,
+                tolerance=background_key_tolerance,
+            )
+            if removed_bg and output.suffix.lower() not in {".png", ".webp"}:
+                output = output.with_suffix(".png")
+
             save_format = "JPEG"
+            final_image: Image.Image = filtered_with_alpha if removed_bg else filtered
             if output.suffix.lower() == ".png":
                 save_format = "PNG"
             elif output.suffix.lower() == ".webp":
                 save_format = "WEBP"
-            filtered.save(output, format=save_format, quality=95)
+            if save_format == "JPEG" and final_image.mode == "RGBA":
+                final_image = final_image.convert("RGB")
+            final_image.save(output, format=save_format, quality=95)
 
         return ApplyImageFilterResult(
             success=True,

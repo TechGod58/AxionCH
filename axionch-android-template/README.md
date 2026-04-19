@@ -58,3 +58,27 @@ At first launch, go to Dashboard and set **Client Config**:
 ## Password vault
 The Android app includes a **Password Vault** screen reachable from Dashboard.
 Vault entries are stored encrypted-at-rest on the backend (`/vault`) using `VAULT_ENCRYPTION_KEY`.
+
+## Realtime capture stack (CameraX + filter graph)
+The new `RealtimeCaptureScreen` uses CameraX preview + recording and live filter rendering.
+Add these dependencies to your Android app module:
+
+```kotlin
+implementation("androidx.camera:camera-core:1.3.4")
+implementation("androidx.camera:camera-camera2:1.3.4")
+implementation("androidx.camera:camera-lifecycle:1.3.4")
+implementation("androidx.camera:camera-video:1.3.4")
+implementation("androidx.camera:camera-view:1.3.4")
+implementation("androidx.camera:camera-media3-effect:1.5.0-beta01")
+implementation("androidx.media3:media3-effect:1.6.1")
+```
+
+Add these permissions in `AndroidManifest.xml`:
+
+```xml
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+```
+
+At runtime, request camera + microphone permission before entering `RealtimeCaptureScreen`.
+`RealtimeCaptureScreen` now uses a live GPU filter graph (`Media3Effect`) applied to both preview and encoded video capture.

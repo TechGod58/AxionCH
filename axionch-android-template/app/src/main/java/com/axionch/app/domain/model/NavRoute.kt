@@ -7,4 +7,6 @@ sealed class NavRoute(val route: String) {
     data object Results : NavRoute("results")
     data object DryRunHistory : NavRoute("dryrun_history")
     data object Vault : NavRoute("vault")
+    data object MediaStudio : NavRoute("media_studio")
+    data object RealtimeCapture : NavRoute("realtime_capture")
 }

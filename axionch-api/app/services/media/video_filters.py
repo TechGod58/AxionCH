@@ -61,6 +61,18 @@ FILTER_PRESETS: dict[str, FilterPreset] = {
     ),
 }
 
+_ALLOWED_CURVES_PRESETS = {
+    "color_negative",
+    "cross_process",
+    "darker",
+    "increase_contrast",
+    "linear_contrast",
+    "medium_contrast",
+    "negative",
+    "strong_contrast",
+    "vintage",
+}
+
 
 @dataclass
 class ApplyVideoFilterResult:
@@ -130,6 +142,31 @@ def _escape_drawtext_text(text: str) -> str:
     return escaped
 
 
+def _escape_filter_path(path: Path) -> str:
+    value = path.as_posix()
+    value = value.replace("\\", "\\\\")
+    value = value.replace(":", "\\:")
+    value = value.replace("'", "\\'")
+    return value
+
+
+def _atempo_chain(speed_factor: float) -> list[str]:
+    if abs(speed_factor - 1.0) < 0.001:
+        return []
+    if speed_factor <= 0:
+        return []
+    target = speed_factor
+    filters: list[str] = []
+    while target > 2.0:
+        filters.append("atempo=2.0")
+        target /= 2.0
+    while target < 0.5:
+        filters.append("atempo=0.5")
+        target *= 2.0
+    filters.append(f"atempo={target:.6f}")
+    return filters
+
+
 def apply_video_filter(
     *,
     preset_id: str,
@@ -150,9 +187,26 @@ def apply_video_filter(
     text_y: int = 16,
     text_size: int = 28,
     text_color: str = "white",
+    subtitle_path: str | None = None,
+    subtitle_url: str | None = None,
+    burn_subtitles: bool = False,
+    speed_factor: float = 1.0,
+    stabilize: bool = False,
+    curves_preset: str | None = None,
+    lut3d_path: str | None = None,
+    lut3d_url: str | None = None,
     sound_path: str | None = None,
     sound_url: str | None = None,
     sound_volume: float = 1.0,
+    audio_denoise: bool = False,
+    audio_eq_low_gain: float = 0.0,
+    audio_eq_mid_gain: float = 0.0,
+    audio_eq_high_gain: float = 0.0,
+    audio_compressor: bool = False,
+    audio_gate: bool = False,
+    audio_ducking: bool = False,
+    loudness_normalization: bool = False,
+    audio_limiter: bool = False,
 ) -> ApplyVideoFilterResult:
     preset = FILTER_PRESETS.get(preset_id)
     if preset is None:
@@ -185,6 +239,10 @@ def apply_video_filter(
     downloaded_overlay = False
     working_sound: Path | None = None
     downloaded_sound = False
+    working_subtitle: Path | None = None
+    downloaded_subtitle = False
+    working_lut: Path | None = None
+    downloaded_lut = False
     try:
         if source_path:
             working_source = validate_local_source_path(
@@ -214,6 +272,20 @@ def apply_video_filter(
                 ".mp3",
                 allowed_mime_prefixes=["audio/"],
             )
+        if subtitle_path or subtitle_url:
+            working_subtitle, downloaded_subtitle = _resolve_local_or_url(
+                subtitle_path,
+                subtitle_url,
+                ".srt",
+                allowed_mime_prefixes=["text/", "application/"],
+            )
+        if lut3d_path or lut3d_url:
+            working_lut, downloaded_lut = _resolve_local_or_url(
+                lut3d_path,
+                lut3d_url,
+                ".cube",
+                allowed_mime_prefixes=["text/", "application/"],
+            )
 
         output_path = _build_output_path(working_source, preset_id, output_name)
 
@@ -226,6 +298,16 @@ def apply_video_filter(
             video_filters.append(
                 f"eq=saturation={max(0.0, saturation_factor):.3f}:brightness={max(-1.0, min(1.0, brightness_delta)):.3f}"
             )
+        if stabilize:
+            video_filters.append("deshake")
+        if curves_preset:
+            preset_name = curves_preset.strip().lower()
+            if preset_name in _ALLOWED_CURVES_PRESETS:
+                video_filters.append(f"curves=preset={preset_name}")
+        if working_lut is not None:
+            video_filters.append(f"lut3d=file='{_escape_filter_path(working_lut)}'")
+        if burn_subtitles and working_subtitle is not None:
+            video_filters.append(f"subtitles='{_escape_filter_path(working_subtitle)}'")
         if text_overlay:
             font_file = Path("C:/Windows/Fonts/arial.ttf")
             drawtext = (
@@ -236,36 +318,89 @@ def apply_video_filter(
             if font_file.exists():
                 drawtext += f":fontfile='{font_file.as_posix()}'"
             video_filters.append(drawtext)
+        if abs(speed_factor - 1.0) > 0.001:
+            clamped_speed = max(0.10, min(4.0, speed_factor))
+            video_filters.append(f"setpts=PTS/{clamped_speed:.6f}")
 
-        cmd = [ffmpeg_binary(), "-y", "-i", str(working_source)]
+        audio_filters: list[str] = []
+        if audio_denoise:
+            audio_filters.append("afftdn")
+        if abs(audio_eq_low_gain) > 0.001:
+            audio_filters.append(f"equalizer=f=120:t=h:w=200:g={audio_eq_low_gain:.2f}")
+        if abs(audio_eq_mid_gain) > 0.001:
+            audio_filters.append(f"equalizer=f=1000:t=h:w=800:g={audio_eq_mid_gain:.2f}")
+        if abs(audio_eq_high_gain) > 0.001:
+            audio_filters.append(f"equalizer=f=5000:t=h:w=2500:g={audio_eq_high_gain:.2f}")
+        if audio_compressor:
+            audio_filters.append("acompressor=threshold=-18dB:ratio=3:attack=20:release=250:makeup=2")
+        if audio_gate:
+            audio_filters.append("agate=threshold=0.03:ratio=2:attack=20:release=200")
+        if loudness_normalization:
+            audio_filters.append("loudnorm=I=-14:TP=-1.5:LRA=11")
+        if audio_limiter:
+            audio_filters.append("alimiter=limit=0.95:level=disabled")
+        audio_filters.extend(_atempo_chain(max(0.10, min(4.0, speed_factor))))
+
+        cmd = [ffmpeg_binary(), "-y", "-hide_banner", "-i", str(working_source)]
 
         has_overlay = working_overlay is not None
         has_sound = working_sound is not None
+
         if has_overlay:
             assert working_overlay is not None
             if working_overlay.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
                 cmd.extend(["-loop", "1"])
             cmd.extend(["-i", str(working_overlay)])
+
+        if has_sound:
+            assert working_sound is not None
+            cmd.extend(["-i", str(working_sound)])
+
+        filter_complex_blocks: list[str] = []
+        if has_overlay:
             base_chain = ",".join(video_filters) if video_filters else "null"
             opacity = max(0.0, min(1.0, overlay_opacity))
-            filter_complex = (
+            filter_complex_blocks.append(
                 f"[0:v]{base_chain}[base];"
                 f"[1:v]format=rgba,colorchannelmixer=aa={opacity:.3f}[ovr];"
                 f"[base][ovr]overlay={max(0, overlay_x)}:{max(0, overlay_y)}[vout]"
             )
-            cmd.extend(["-filter_complex", filter_complex, "-map", "[vout]"])
+
+        use_ducking = has_sound and audio_ducking
+        if use_ducking:
+            sound_index = 2 if has_overlay else 1
+            duck_gain = max(0.0, sound_volume)
+            combined_audio_filters = list(audio_filters)
+            suffix = f",{','.join(combined_audio_filters)}" if combined_audio_filters else ""
+            filter_complex_blocks.append(
+                f"[{sound_index}:a]volume={duck_gain:.3f}[bg];"
+                f"[bg][0:a]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=250[ducked];"
+                f"[0:a][ducked]amix=inputs=2:duration=first:dropout_transition=2{suffix}[aout]"
+            )
+
+        if filter_complex_blocks:
+            cmd.extend(["-filter_complex", ";".join(filter_complex_blocks)])
+
+        if has_overlay:
+            cmd.extend(["-map", "[vout]"])
         else:
             if video_filters:
                 cmd.extend(["-vf", ",".join(video_filters)])
             cmd.extend(["-map", "0:v:0"])
 
-        if has_sound:
-            assert working_sound is not None
-            cmd.extend(["-i", str(working_sound), "-map", "2:a:0" if has_overlay else "1:a:0"])
-            cmd.extend(["-filter:a", f"volume={max(0.0, sound_volume):.3f}"])
+        if use_ducking:
+            cmd.extend(["-map", "[aout]"])
+        elif has_sound:
+            sound_index = 2 if has_overlay else 1
+            cmd.extend(["-map", f"{sound_index}:a:0"])
+            local_audio_filters = [f"volume={max(0.0, sound_volume):.3f}"] + audio_filters
+            if local_audio_filters:
+                cmd.extend(["-filter:a", ",".join(local_audio_filters)])
             cmd.extend(["-shortest"])
         else:
-            cmd.extend(["-map", "0:a?", "-c:a", "aac"])
+            cmd.extend(["-map", "0:a?"])
+            if audio_filters:
+                cmd.extend(["-filter:a", ",".join(audio_filters)])
 
         cmd.extend(
             [
@@ -277,6 +412,8 @@ def apply_video_filter(
                 "20",
                 "-movflags",
                 "+faststart",
+                "-c:a",
+                "aac",
                 str(output_path),
             ]
         )
@@ -343,5 +480,15 @@ def apply_video_filter(
         if downloaded_sound and working_sound is not None:
             try:
                 working_sound.unlink(missing_ok=True)
+            except Exception:
+                pass
+        if downloaded_subtitle and working_subtitle is not None:
+            try:
+                working_subtitle.unlink(missing_ok=True)
+            except Exception:
+                pass
+        if downloaded_lut and working_lut is not None:
+            try:
+                working_lut.unlink(missing_ok=True)
             except Exception:
                 pass

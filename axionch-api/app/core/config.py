@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     media_block_private_networks: bool = True
     media_allowed_video_mime_prefixes: str = "video/"
     media_allowed_image_mime_prefixes: str = "image/"
+    media_allowed_audio_mime_prefixes: str = "audio/"
 
     # OAuth scaffold settings
     oauth_state_ttl_seconds: int = 600

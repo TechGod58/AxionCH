@@ -141,6 +141,155 @@ class AxionApiClient(
         execute(request, ImageFilterApplyResponse::class.java)
     }
 
+    suspend fun healImage(requestBody: ImageHealRequest): ImageHealResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/image/heal")
+            .post(gson.toJson(requestBody).toRequestBody(JSON))
+            .build()
+        execute(request, ImageHealResponse::class.java)
+    }
+
+    suspend fun getCreatorTemplates(
+        platform: String? = null,
+        mediaType: String? = null
+    ): CreatorTemplateListResponse = withContext(Dispatchers.IO) {
+        val base = "${normalizedBaseUrl()}media/templates".toHttpUrlOrNull()
+            ?: throw IOException("Invalid URL")
+        val urlBuilder = base.newBuilder()
+        if (!platform.isNullOrBlank()) {
+            urlBuilder.addQueryParameter("platform", platform)
+        }
+        if (!mediaType.isNullOrBlank()) {
+            urlBuilder.addQueryParameter("media_type", mediaType)
+        }
+        val request = withAuth(Request.Builder())
+            .url(urlBuilder.build())
+            .get()
+            .build()
+        execute(request, CreatorTemplateListResponse::class.java)
+    }
+
+    suspend fun getExportPresets(): ExportPresetListResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/exports/presets")
+            .get()
+            .build()
+        execute(request, ExportPresetListResponse::class.java)
+    }
+
+    suspend fun queueExportJob(requestBody: ExportQueueRequest): ExportQueueResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/exports/queue")
+            .post(gson.toJson(requestBody).toRequestBody(JSON))
+            .build()
+        execute(request, ExportQueueResponse::class.java)
+    }
+
+    suspend fun getExportJobStatus(jobId: String): ExportJobStatusResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/exports/jobs/$jobId")
+            .get()
+            .build()
+        execute(request, ExportJobStatusResponse::class.java)
+    }
+
+    suspend fun composeTimeline(requestBody: TimelineComposeRequest): TimelineComposeResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/timeline/compose")
+            .post(gson.toJson(requestBody).toRequestBody(JSON))
+            .build()
+        execute(request, TimelineComposeResponse::class.java)
+    }
+
+    suspend fun trackVideoMotion(requestBody: MotionTrackRequest): MotionTrackResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/video/motion-track")
+            .post(gson.toJson(requestBody).toRequestBody(JSON))
+            .build()
+        execute(request, MotionTrackResponse::class.java)
+    }
+
+    suspend fun transcribeCaptions(requestBody: CaptionTranscribeRequest): CaptionTranscribeResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/captions/transcribe")
+            .post(gson.toJson(requestBody).toRequestBody(JSON))
+            .build()
+        execute(request, CaptionTranscribeResponse::class.java)
+    }
+
+    suspend fun buildSrt(requestBody: CaptionSrtBuildRequest): CaptionSrtBuildResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/captions/srt")
+            .post(gson.toJson(requestBody).toRequestBody(JSON))
+            .build()
+        execute(request, CaptionSrtBuildResponse::class.java)
+    }
+
+    suspend fun getAssets(kind: String? = null, tag: String? = null): AssetListResponse = withContext(Dispatchers.IO) {
+        val base = "${normalizedBaseUrl()}media/assets".toHttpUrlOrNull()
+            ?: throw IOException("Invalid URL")
+        val urlBuilder = base.newBuilder()
+        if (!kind.isNullOrBlank()) {
+            urlBuilder.addQueryParameter("kind", kind)
+        }
+        if (!tag.isNullOrBlank()) {
+            urlBuilder.addQueryParameter("tag", tag)
+        }
+        val request = withAuth(Request.Builder())
+            .url(urlBuilder.build())
+            .get()
+            .build()
+        execute(request, AssetListResponse::class.java)
+    }
+
+    suspend fun addAsset(requestBody: AssetUpsertRequest): AssetUpsertResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/assets")
+            .post(gson.toJson(requestBody).toRequestBody(JSON))
+            .build()
+        execute(request, AssetUpsertResponse::class.java)
+    }
+
+    suspend fun deleteAsset(assetId: String): AssetDeleteResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/assets/$assetId")
+            .delete()
+            .build()
+        execute(request, AssetDeleteResponse::class.java)
+    }
+
+    suspend fun startLiveMulticast(requestBody: LiveMulticastStartRequest): LiveMulticastSessionResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/live/multicast/start")
+            .post(gson.toJson(requestBody).toRequestBody(JSON))
+            .build()
+        execute(request, LiveMulticastSessionResponse::class.java)
+    }
+
+    suspend fun listLiveMulticastSessions(): LiveMulticastSessionListResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/live/multicast/sessions")
+            .get()
+            .build()
+        execute(request, LiveMulticastSessionListResponse::class.java)
+    }
+
+    suspend fun getLiveMulticastSession(sessionId: String): LiveMulticastSessionResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/live/multicast/sessions/$sessionId")
+            .get()
+            .build()
+        execute(request, LiveMulticastSessionResponse::class.java)
+    }
+
+    suspend fun stopLiveMulticastSession(sessionId: String): LiveMulticastStopResponse = withContext(Dispatchers.IO) {
+        val request = withAuth(Request.Builder())
+            .url("${normalizedBaseUrl()}media/live/multicast/sessions/$sessionId/stop")
+            .post("{}".toRequestBody(JSON))
+            .build()
+        execute(request, LiveMulticastStopResponse::class.java)
+    }
+
     suspend fun getDryRunHistory(
         limit: Int = 25,
         platform: String? = null,

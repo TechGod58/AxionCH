@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.cors import has_wildcard, parse_csv, validate_cors_for_runtime
 from app.core.security_checks import security_warnings
 from app.db.session import init_db
+from app.services.media.live_multicast import live_multicast_service
 from app.services.oauth.refresh_worker import oauth_refresh_worker_service
 from app.routes import accounts, auth, config, health, media, oauth, posts, vault
 from app.services.publish.queue_service import publish_queue_service
@@ -52,3 +53,4 @@ def on_startup() -> None:
 def on_shutdown() -> None:
     publish_queue_service.stop()
     oauth_refresh_worker_service.stop()
+    live_multicast_service.shutdown()

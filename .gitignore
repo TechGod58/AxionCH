@@ -28,3 +28,8 @@ Thumbs.db
 *.db
 media_outputs/
 dist/
+
+# Android signing keys (never commit)
+**/keystore/
+*.jks
+*.keystore

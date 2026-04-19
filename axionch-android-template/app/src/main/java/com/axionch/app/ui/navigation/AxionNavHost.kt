@@ -9,6 +9,8 @@ import com.axionch.app.ui.screens.accounts.AccountsScreen
 import com.axionch.app.ui.screens.composer.ComposerScreen
 import com.axionch.app.ui.screens.dashboard.DashboardScreen
 import com.axionch.app.ui.screens.dryrun.DryRunHistoryScreen
+import com.axionch.app.ui.screens.media.MediaStudioScreen
+import com.axionch.app.ui.screens.media.RealtimeCaptureScreen
 import com.axionch.app.ui.screens.results.ResultsScreen
 import com.axionch.app.ui.screens.vault.VaultScreen
 
@@ -35,6 +37,12 @@ fun AxionNavHost(navController: NavHostController) {
         }
         composable(NavRoute.Vault.route) {
             VaultScreen(navController)
+        }
+        composable(NavRoute.MediaStudio.route) {
+            MediaStudioScreen(navController)
+        }
+        composable(NavRoute.RealtimeCapture.route) {
+            RealtimeCaptureScreen(navController)
         }
     }
 }

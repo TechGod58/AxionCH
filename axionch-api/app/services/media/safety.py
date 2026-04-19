@@ -36,6 +36,10 @@ def allowed_image_mime_prefixes() -> list[str]:
     return _mime_prefixes(settings.media_allowed_image_mime_prefixes)
 
 
+def allowed_audio_mime_prefixes() -> list[str]:
+    return _mime_prefixes(settings.media_allowed_audio_mime_prefixes)
+
+
 def _hostname_allowed(hostname: str, allowed_domains: list[str]) -> bool:
     if not allowed_domains:
         return True
