@@ -2,6 +2,12 @@
 
 This package is a stronger starter for the **AxionCH** creator app:
 
+## Repository purpose
+
+AxionCH is the multi-platform Creator Hub workspace, combining a FastAPI backend scaffold, Android Jetpack Compose template, shared Kotlin module, and desktop reference structure for account-connected content publishing workflows.
+
+The repository is public so the architecture and source layout are clear. Public visibility does not grant public or third-party use rights; the legal notice below remains controlling.
+
 ## Legal Notice
 This repository is proprietary software and is **not** licensed for public or third-party use.
 See:
