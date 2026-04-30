@@ -1,3 +1,10 @@
+<!-- WIP-BANNER:START -->
+> [!IMPORTANT]
+> **Status: Work in Progress**
+>
+> This repository is under active development. Content, structure, and implementation details may change frequently.
+<!-- WIP-BANNER:END -->
+
 # AxionCH Stronger Starter
 
 This package is a stronger starter for the **AxionCH** creator app:
